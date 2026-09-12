@@ -8,6 +8,8 @@ let settings = { apiUrl: '', captureInterval: 15 }; // captureInterval in second
 let currentTasks = [];
 let monitoringEnabled = true;
 let currentTargetMood = 60;
+let connectionState = { connected: false, message: 'Not connected — using demo mode' };
+let lastAnalysis = null;
 
 let captureTimer = null;
 let captureInFlight = false; // guards against overlapping requests if backend is slow
@@ -15,6 +17,11 @@ let captureInFlight = false; // guards against overlapping requests if backend i
 function broadcast(channel, payload) {
   if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.webContents.send(channel, payload);
   if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send(channel, payload);
+}
+
+function updateConnection(nextState) {
+  connectionState = nextState;
+  broadcast('conn-update', connectionState);
 }
 
 // ---- screenshot capture ----
@@ -42,20 +49,18 @@ async function captureAndAnalyze() {
     return;
   }
   if (!settings.apiUrl) {
-    broadcast('conn-update', { connected: false, message: 'Not connected — using demo mode' });
+    updateConnection({ connected: false, message: 'Not connected — using demo mode' });
     scheduleNextCapture();
     return;
   }
   if (captureInFlight) {
-    // shouldn't normally happen since we only schedule the next run after
-    // this one finishes, but guards against any edge case re-entry
     scheduleNextCapture();
     return;
   }
 
   captureInFlight = true;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000); // don't hang forever on a slow backend
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
     const image = await captureScreenshot();
@@ -78,23 +83,24 @@ async function captureAndAnalyze() {
     } else if (data.status === 'unproductive') {
       mood = Math.max(0, currentTargetMood - 15);
     } else {
-      mood = currentTargetMood + (50 - currentTargetMood) * 0.3; // drift toward neutral on "ambiguous"
+      mood = currentTargetMood + (50 - currentTargetMood) * 0.3;
     }
     currentTargetMood = mood;
 
     broadcast('mood-update', mood);
-    broadcast('analysis-update', {
+    lastAnalysis = {
       status: data.status || null,
       reasoning: data.reasoning || null,
       timestamp: Date.now(),
-    });
-    broadcast('conn-update', { connected: true, message: 'Connected — live data' });
+    };
+    broadcast('analysis-update', lastAnalysis);
+    updateConnection({ connected: true, message: 'Connected — live data' });
   } catch (e) {
-    broadcast('conn-update', { connected: false, message: "Can't reach backend — check the URL" });
+    updateConnection({ connected: false, message: "Can't reach backend — check the URL" });
   } finally {
     clearTimeout(timeoutId);
     captureInFlight = false;
-    scheduleNextCapture(); // only schedule the next one now that this one is fully done
+    scheduleNextCapture();
   }
 }
 
@@ -106,8 +112,13 @@ function scheduleNextCapture() {
 
 // ---- IPC from the renderer windows ----
 ipcMain.on('settings-update', (event, newSettings) => {
-  settings = newSettings;
-  scheduleNextCapture(); // pick up the new URL/interval quickly instead of waiting out the old one
+  settings = {
+    apiUrl: typeof newSettings?.apiUrl === 'string' ? newSettings.apiUrl : '',
+    captureInterval: Math.max(5, Number(newSettings?.captureInterval) || 15),
+  };
+  // A user who just saved a backend URL should not have to wait for the
+  // previous interval before learning whether it works.
+  captureAndAnalyze();
 });
 
 ipcMain.on('tasks-update', (event, tasks) => {
@@ -116,7 +127,15 @@ ipcMain.on('tasks-update', (event, tasks) => {
 
 ipcMain.on('monitoring-toggle', (event, enabled) => {
   monitoringEnabled = enabled;
+  if (monitoringEnabled) captureAndAnalyze();
 });
+
+ipcMain.handle('focus-state', () => ({
+  mood: currentTargetMood,
+  connected: connectionState.connected,
+  analysis: lastAnalysis,
+  monitoringEnabled,
+}));
 
 ipcMain.on('nudge', (event, delta) => {
   currentTargetMood = Math.max(0, Math.min(100, currentTargetMood + delta));
@@ -133,7 +152,14 @@ function createWindows() {
       contextIsolation: true,
     },
   });
-  dashboardWindow.loadFile('dashboard.html');
+  // Vite serves React during development, enabling hot reload in Electron.
+  // Without the environment variable, the packaged build uses dist instead.
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    dashboardWindow.loadURL(devServerUrl);
+  } else {
+    dashboardWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+  }
 
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const winSize = 150;
@@ -155,7 +181,7 @@ function createWindows() {
   });
   petWindow.setAlwaysOnTop(true, 'screen-saver');
   petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  petWindow.loadFile('pet.html');
+  petWindow.loadFile(path.join(__dirname, 'pet.html'));
 
   dashboardWindow.on('closed', () => { dashboardWindow = null; });
   petWindow.on('closed', () => { petWindow = null; });
@@ -163,7 +189,7 @@ function createWindows() {
 
 app.whenReady().then(() => {
   createWindows();
-  scheduleNextCapture(); // kicks off the recurring screenshot -> backend -> mood cycle
+  captureAndAnalyze();
 });
 
 app.on('window-all-closed', () => {

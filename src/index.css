@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+.focus-companion-dark {
+  --void: #171B2E;
+  --surface: #212642;
+  --surface-soft: #2A3057;
+  --line: #343B68;
+  --amber: #F0A93E;
+  --amber-dim: #8A6A38;
+  --mauve: #6E6079;
+  --text: #ECE7DA;
+  --text-dim: #9A9FBD;
+}
