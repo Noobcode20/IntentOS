@@ -61,7 +61,11 @@
     document.getElementById('glow').style.opacity = 0.3 + t*0.35;
 
     const baseline = 132;
-    const controlY = baseline + (18 - t*38);
+
+// 0 = focused/calm, 100 = distracted/happy
+// SVG Y coordinates increase downward:
+// lower control point = frown, higher control point = smile
+const controlY = baseline + (t * 38 - 20);
     document.getElementById('mouth').setAttribute('d', `M78,128 Q100,${controlY} 122,128`);
 
     const eyeRy = 8 + t*4;

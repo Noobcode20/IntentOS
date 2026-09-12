@@ -78,12 +78,15 @@ async function captureAndAnalyze() {
     let mood;
     if (typeof data.mood === 'number') {
       mood = Math.max(0, Math.min(100, data.mood));
-    } else if (data.status === 'productive') {
-      mood = Math.min(100, currentTargetMood + 15);
-    } else if (data.status === 'unproductive') {
-      mood = Math.max(0, currentTargetMood - 15);
+    } else if (data.status === 'distracted') {
+      // More distraction = happier pet 
+      mood = Math.min(100, currentTargetMood + 10);
+    } else if (data.status === 'focused') {
+      // More focus = less smiley / calmer pet
+      mood = Math.max(0, currentTargetMood - 10);
     } else {
-      mood = currentTargetMood + (50 - currentTargetMood) * 0.3;
+      // Ambiguous = don't change the pet's current state
+      mood = currentTargetMood ;
     }
     currentTargetMood = mood;
 
