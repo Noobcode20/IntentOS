@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body{
+    margin:0; padding:0;
+    width:100%; height:100%;
+    background:transparent;
+    overflow:hidden;
+    -webkit-app-region: drag;   /* lets you drag the whole widget around */
+  }
+  .stage{
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .glow{
+    position:absolute;
+    width:120px; height:120px;
+    border-radius:50%;
+    filter:blur(20px);
+    opacity:0.5;
+  }
+  svg#pet{ position:relative; width:100px; height:100px; }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="glow" id="glow"></div>
+  <svg id="pet" viewBox="0 0 200 200">
+    <path id="pet-body" d="M100,20 C150,20 175,60 175,105 C175,155 142,180 100,180 C58,180 25,155 25,105 C25,60 50,20 100,20 Z" fill="#F0A93E"/>
+    <ellipse id="eye-l" cx="75" cy="95" rx="9" ry="12" fill="#171B2E"/>
+    <ellipse id="eye-r" cx="125" cy="95" rx="9" ry="12" fill="#171B2E"/>
+    <circle id="spark-l" cx="78" cy="90" r="2.4" fill="#ECE7DA"/>
+    <circle id="spark-r" cx="128" cy="90" r="2.4" fill="#ECE7DA"/>
+    <path id="mouth" d="M78,128 Q100,148 122,128" stroke="#171B2E" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </svg>
+</div>
+
+<script>
+  // This window doesn't talk to the backend itself — the main process
+  // does that once and broadcasts the result to both windows, so the
+  // dashboard and the floating pet always agree.
+  let targetMood = 60;
+  let currentMood = 60;
+
+  function lerpColor(a, b, t){
+    const ah = a.match(/\w\w/g).map(x=>parseInt(x,16));
+    const bh = b.match(/\w\w/g).map(x=>parseInt(x,16));
+    const rh = ah.map((c,i)=>Math.round(c + (bh[i]-c)*t));
+    return '#' + rh.map(c=>c.toString(16).padStart(2,'0')).join('');
+  }
+
+  function applyMoodVisuals(mood){
+    const t = mood/100;
+    const bodyColor = lerpColor('#6E6079', '#F0A93E', t);
+    document.getElementById('pet-body').setAttribute('fill', bodyColor);
+    document.getElementById('glow').style.background =
+      `radial-gradient(circle, ${lerpColor('#4a4560', '#F0A93E', t)} 0%, transparent 70%)`;
+    document.getElementById('glow').style.opacity = 0.3 + t*0.35;
+
+    const baseline = 132;
+    const controlY = baseline + (18 - t*38);
+    document.getElementById('mouth').setAttribute('d', `M78,128 Q100,${controlY} 122,128`);
+
+    const eyeRy = 8 + t*4;
+    document.getElementById('eye-l').setAttribute('ry', eyeRy);
+    document.getElementById('eye-r').setAttribute('ry', eyeRy);
+    document.getElementById('spark-l').style.opacity = 0.3 + t*0.7;
+    document.getElementById('spark-r').style.opacity = 0.3 + t*0.7;
+
+    const pet = document.getElementById('pet');
+    pet.style.animation = `bounce ${2.6 - t*1.2}s ease-in-out infinite`;
+  }
+
+  function animateMood(){
+    currentMood += (targetMood - currentMood) * 0.04;
+    applyMoodVisuals(currentMood);
+    requestAnimationFrame(animateMood);
+  }
+  requestAnimationFrame(animateMood);
+
+  if (window.focusAPI) {
+    window.focusAPI.onMoodUpdate((mood) => { targetMood = mood; });
+  }
+
+  const styleTag = document.createElement('style');
+  styleTag.textContent = `@keyframes bounce { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }`;
+  document.head.appendChild(styleTag);
+</script>
+
+</body>
+</html>

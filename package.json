@@ -1,0 +1,12 @@
+{
+  "name": "focus-companion",
+  "version": "1.0.0",
+  "description": "A floating desktop companion that reflects how on-task you are.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}
