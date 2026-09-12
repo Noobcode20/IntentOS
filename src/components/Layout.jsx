@@ -54,6 +54,7 @@ const chevronDownIcon = (
 )
 
 function Sidebar({ activePage, collapsed, onToggle }) {
+  const [profileOpen, setProfileOpen] = useState(false)
   const navItems = [
     { path: '/', label: 'Overview', icon: overviewIcon },
     { path: '/activity', label: 'Activity', icon: activityIcon },
@@ -179,7 +180,7 @@ function Sidebar({ activePage, collapsed, onToggle }) {
             </div>
           </div>
 
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('focus-profile'))} className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors text-left">
+          <button type="button" onClick={() => setProfileOpen((open) => !open)} className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors text-left">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs border border-white shadow-sm">
                 AR
@@ -194,6 +195,7 @@ function Sidebar({ activePage, collapsed, onToggle }) {
               <path d="m7 9 5-5 5 5" />
             </svg>
           </button>
+          {profileOpen && <div className="mx-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg"><button type="button" onClick={() => setProfileOpen(false)} className="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50">Account settings</button><button type="button" onClick={() => setProfileOpen(false)} className="block w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50">Sign out</button></div>}
         </div>
       )}
     </aside>

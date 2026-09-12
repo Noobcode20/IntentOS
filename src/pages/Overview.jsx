@@ -210,18 +210,7 @@ function OverviewPage() {
               type="text" value={query} onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition">
-            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <rect height="18" rx="2" ry="2" width="18" x="3" y="4" />
-              <line x1="16" x2="16" y1="2" y2="6" />
-              <line x1="8" x2="8" y1="2" y2="6" />
-              <line x1="3" x2="21" y1="10" y2="10" />
-            </svg>
-            <span>Today, Oct 24</span>
-            <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          <DateSelector />
           <button onClick={() => setModal('objective')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20">
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14" />
@@ -268,6 +257,7 @@ function OverviewPage() {
                 <Link to="/activity" className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View in Chronological Stream →</Link>
               </div>
 
+              {visibleActivities.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 bg-white p-5 text-xs text-slate-500">No activities match this filter or search.</p>}
               {visibleActivities.map((a) => (
                 <div key={a.id} className={`bg-white rounded-xl border-2 ${a.borderColor} p-4 transition hover:shadow-sm`}>
                   <div className="flex items-start justify-between">
