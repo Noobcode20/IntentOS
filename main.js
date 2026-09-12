@@ -47,15 +47,13 @@ async function captureAndAnalyze() {
     return;
   }
   if (captureInFlight) {
-    // shouldn't normally happen since we only schedule the next run after
-    // this one finishes, but guards against any edge case re-entry
     scheduleNextCapture();
     return;
   }
 
   captureInFlight = true;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000); // don't hang forever on a slow backend
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
 
   try {
     const image = await captureScreenshot();
@@ -78,7 +76,7 @@ async function captureAndAnalyze() {
     } else if (data.status === 'unproductive') {
       mood = Math.max(0, currentTargetMood - 15);
     } else {
-      mood = currentTargetMood + (50 - currentTargetMood) * 0.3; // drift toward neutral on "ambiguous"
+      mood = currentTargetMood + (50 - currentTargetMood) * 0.3;
     }
     currentTargetMood = mood;
 
@@ -94,7 +92,7 @@ async function captureAndAnalyze() {
   } finally {
     clearTimeout(timeoutId);
     captureInFlight = false;
-    scheduleNextCapture(); // only schedule the next one now that this one is fully done
+    scheduleNextCapture();
   }
 }
 
@@ -107,7 +105,7 @@ function scheduleNextCapture() {
 // ---- IPC from the renderer windows ----
 ipcMain.on('settings-update', (event, newSettings) => {
   settings = newSettings;
-  scheduleNextCapture(); // pick up the new URL/interval quickly instead of waiting out the old one
+  scheduleNextCapture();
 });
 
 ipcMain.on('tasks-update', (event, tasks) => {
@@ -133,7 +131,7 @@ function createWindows() {
       contextIsolation: true,
     },
   });
-  dashboardWindow.loadFile('dashboard.html');
+  dashboardWindow.loadFile(path.join(__dirname, 'dist/index.html'));
 
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const winSize = 150;
@@ -163,7 +161,7 @@ function createWindows() {
 
 app.whenReady().then(() => {
   createWindows();
-  scheduleNextCapture(); // kicks off the recurring screenshot -> backend -> mood cycle
+  scheduleNextCapture();
 });
 
 app.on('window-all-closed', () => {
