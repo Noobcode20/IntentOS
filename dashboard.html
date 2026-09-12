@@ -265,14 +265,22 @@
       <div class="field-row">
         <input type="text" id="api-url" placeholder="http://localhost:5000">
       </div>
-      <p class="field-label">Poll interval (seconds)</p>
+      <p class="field-label">Capture interval (seconds)</p>
       <div class="field-row">
-        <input type="number" id="poll-interval" value="15" min="3">
+        <input type="number" id="poll-interval" value="15" min="5">
         <button class="btn-secondary" onclick="saveSettings()">Save</button>
       </div>
       <div class="conn-state">
         <span class="conn-dot" id="conn-dot"></span>
         <span id="conn-text">Not connected — using demo mode</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Monitoring</h2>
+      <p class="field-label" style="margin-bottom:8px;">Pauses screenshot capture without closing the app.</p>
+      <div class="demo-row">
+        <button class="btn-secondary" id="monitor-toggle-btn" onclick="toggleMonitoring()">Pause monitoring</button>
       </div>
     </div>
 
@@ -305,6 +313,13 @@
       <h2>Session so far</h2>
       <div class="strip" id="strip"><span class="strip-empty">No readings yet.</span></div>
     </div>
+
+    <div class="strip-panel">
+      <h2>Last reading</h2>
+      <div class="status-sub" id="reasoning-text" style="text-align:left; margin-top:0; max-width:none;">
+        Waiting for the first screenshot to be analyzed…
+      </div>
+    </div>
   </div>
 
 </div>
@@ -312,7 +327,7 @@
 <script>
   // ---- persistent state (best-effort) ----
   let tasks = [];
-  let settings = { apiUrl: "", pollInterval: 15 };
+  let settings = { apiUrl: "", captureInterval: 15 };
 
   async function loadState(){
     try{
@@ -324,13 +339,14 @@
       if(s) settings = JSON.parse(s);
     }catch(e){ /* no saved settings yet */ }
     document.getElementById('api-url').value = settings.apiUrl || "";
-    document.getElementById('poll-interval').value = settings.pollInterval || 15;
+    document.getElementById('poll-interval').value = settings.captureInterval || 15;
     renderTasks();
   }
 
   async function saveTasks(){
     try{ localStorage.setItem('fc:tasks', JSON.stringify(tasks)); }
     catch(e){ console.error('could not save tasks', e); }
+    if (window.focusAPI) window.focusAPI.sendTasks(tasks); // main includes these in every capture request
   }
   async function saveSettingsToStorage(){
     try{ localStorage.setItem('fc:settings', JSON.stringify(settings)); }
@@ -368,11 +384,21 @@
     if(e.key === 'Enter') addTask();
   });
 
+  // ---- monitoring pause/resume ----
+  let monitoring = true;
+  function toggleMonitoring(){
+    monitoring = !monitoring;
+    if (window.focusAPI) window.focusAPI.toggleMonitoring(monitoring);
+    document.getElementById('monitor-toggle-btn').textContent =
+      monitoring ? 'Pause monitoring' : 'Resume monitoring';
+  }
+
+
   function saveSettings(){
     settings.apiUrl = document.getElementById('api-url').value.trim();
-    settings.pollInterval = parseInt(document.getElementById('poll-interval').value) || 15;
+    settings.captureInterval = parseInt(document.getElementById('poll-interval').value) || 15;
     saveSettingsToStorage();
-    restartPolling();
+    sendSettingsToMain();
   }
 
   // ---- mood engine ----
@@ -457,17 +483,24 @@
     document.getElementById('conn-text').textContent = msg;
   }
 
-  // ---- the main process talks to the friend's backend once and
-  // broadcasts results to this window and the floating pet, so both
-  // always show the same thing. ----
-  // Expected contract (adjust to whatever the backend actually returns):
-  //   GET {apiUrl}/status
-  //   -> { "status": "productive" | "unproductive" | "ambiguous" }
-  //   or -> { "mood": 0-100 }
-  function restartPolling(){
+  // ---- the main process captures a screenshot, sends it (with your
+  // task list) to the friend's backend, and broadcasts the result to
+  // this window and the floating pet, so both always show the same thing. ----
+  // Expected contract:
+  //   POST {apiUrl}/analyze
+  //   body: { "image": "data:image/jpeg;base64,...", "tasks": ["task1", "task2"] }
+  //   response: { "mood": 0-100 } or { "status": "productive"|"unproductive"|"ambiguous", "reasoning": "..." }
+  function sendSettingsToMain(){
     if (window.focusAPI) {
       window.focusAPI.sendSettings(settings);
     }
+  }
+
+  function formatReasoning(data){
+    const time = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const statusLabel = data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Update';
+    const reasoning = data.reasoning ? ` — ${data.reasoning}` : '';
+    return `${time} · ${statusLabel}${reasoning}`;
   }
 
   if (window.focusAPI) {
@@ -477,6 +510,9 @@
     });
     window.focusAPI.onConnUpdate((state) => {
       setConnState(state.connected, state.message);
+    });
+    window.focusAPI.onAnalysisUpdate((data) => {
+      document.getElementById('reasoning-text').textContent = formatReasoning(data);
     });
   }
 
@@ -488,7 +524,8 @@
   // ---- init ----
   loadState().then(() => {
     applyMoodVisuals(currentMood);
-    restartPolling(); // tells the main process to start polling with saved settings
+    sendSettingsToMain(); // tells the main process to start the capture loop with saved settings
+    if (window.focusAPI) window.focusAPI.sendTasks(tasks); // main needs the task list for the first capture too
   });
 </script>
 
