@@ -7,6 +7,7 @@ export function FocusProvider({ children }) {
   const [mood, setMood] = useState(60)
   const [analysis, setAnalysis] = useState(null)
   const [connected, setConnected] = useState(false)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
 
   useEffect(() => {
     const api = window.focusAPI
@@ -17,14 +18,22 @@ export function FocusProvider({ children }) {
     const onAnalysis = (d) => setAnalysis(d)
     const onConn = (s) => setConnected(s.connected)
 
-    api.onMoodUpdate(onMood)
-    api.onAnalysisUpdate(onAnalysis)
-    api.onConnUpdate(onConn)
+    const stopMood = api.onMoodUpdate(onMood)
+    const stopAnalysis = api.onAnalysisUpdate(onAnalysis)
+    const stopConn = api.onConnUpdate(onConn)
+
+    // Events can be emitted before React mounts, so hydrate the dashboard
+    // from the main process once as well as subscribing to future changes.
+    api.getState?.().then((state) => {
+      if (typeof state?.mood === 'number') setMood(state.mood)
+      if (typeof state?.connected === 'boolean') setConnected(state.connected)
+      if (state?.analysis) setAnalysis(state.analysis)
+    }).catch(() => {})
 
     return () => {
-      api.onMoodUpdate.removeListener(onMood)
-      api.onAnalysisUpdate.removeListener(onAnalysis)
-      api.onConnUpdate.removeListener(onConn)
+      stopMood?.()
+      stopAnalysis?.()
+      stopConn?.()
     }
   }, [])
 
@@ -34,7 +43,7 @@ export function FocusProvider({ children }) {
   const nudge = (d) => apiRef.current?.nudge?.(d)
 
   return (
-    <FocusContext.Provider value={{ mood, analysis, connected, sendSettings, sendTasks, toggleMonitoring, nudge }}>
+    <FocusContext.Provider value={{ mood, analysis, connected, rightSidebarOpen, toggleRightSidebar: () => setRightSidebarOpen((open) => !open), sendSettings, sendTasks, toggleMonitoring, nudge }}>
       {children}
     </FocusContext.Provider>
   )

@@ -1,5 +1,8 @@
-import { TopBar, SearchInput, DateSelector } from '../components/Layout'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { TopBar, SearchInput, DateSelector, SidebarToggle } from '../components/Layout'
 import { useFocus } from '../context/FocusContext'
+import ActionModal from '../components/ActionModal'
 
 const activities = [
   {
@@ -70,8 +73,120 @@ const milestones = [
   { label: 'Obsidian Synthesis & Equation Sheet', status: 'pending' },
 ]
 
+const SETTINGS_KEY = 'focus-companion.settings'
+
+function ConnectionSettings() {
+  const { connected, sendSettings, toggleMonitoring } = useFocus()
+  const [apiUrl, setApiUrl] = useState('')
+  const [captureInterval, setCaptureInterval] = useState(15)
+  const [monitoring, setMonitoring] = useState(true)
+  const [message, setMessage] = useState('Demo mode — add your analyzer endpoint to begin live monitoring.')
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
+      const savedUrl = typeof saved.apiUrl === 'string' ? saved.apiUrl : ''
+      const savedInterval = Number.isFinite(saved.captureInterval) ? saved.captureInterval : 15
+      const savedMonitoring = typeof saved.monitoring === 'boolean' ? saved.monitoring : true
+      setApiUrl(savedUrl)
+      setCaptureInterval(savedInterval)
+      setMonitoring(savedMonitoring)
+      sendSettings({ apiUrl: savedUrl, captureInterval: savedInterval })
+      toggleMonitoring(savedMonitoring)
+    } catch {
+      // A malformed local value should not prevent the dashboard from loading.
+    }
+  }, [])
+
+  function saveSettings(event) {
+    event.preventDefault()
+    const normalizedUrl = apiUrl.trim().replace(/\/$/, '')
+
+    if (normalizedUrl) {
+      try {
+        const url = new URL(normalizedUrl)
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported protocol')
+      } catch {
+        setMessage('Use a complete http:// or https:// analyzer URL.')
+        return
+      }
+    }
+
+    const nextSettings = { apiUrl: normalizedUrl, captureInterval: Math.max(5, Number(captureInterval) || 15) }
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...nextSettings, monitoring }))
+    sendSettings(nextSettings)
+    toggleMonitoring(monitoring)
+    setMessage(normalizedUrl ? 'Settings saved. The next capture will check the analyzer.' : 'Saved in demo mode.')
+  }
+
+  function setMonitoringState(enabled) {
+    setMonitoring(enabled)
+    toggleMonitoring(enabled)
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...saved, monitoring: enabled }))
+    } catch {
+      // Saving the preference is non-essential; the main process still gets it.
+    }
+  }
+
+  return (
+    <form onSubmit={saveSettings} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3.5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-900">Live monitoring</h3>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${connected ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+          {connected ? 'Connected' : 'Demo mode'}
+        </span>
+      </div>
+      <label className="block space-y-1.5">
+        <span className="text-[11px] font-medium text-slate-600">Analyzer URL</span>
+        <input
+          value={apiUrl}
+          onChange={(event) => setApiUrl(event.target.value)}
+          type="url"
+          placeholder="https://your-server.example"
+          className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+        />
+      </label>
+      <div className="flex items-end gap-2">
+        <label className="flex-1 space-y-1.5">
+          <span className="text-[11px] font-medium text-slate-600">Capture interval</span>
+          <div className="relative">
+            <input
+              value={captureInterval}
+              onChange={(event) => setCaptureInterval(event.target.value)}
+              type="number"
+              min="5"
+              step="1"
+              className="w-full px-3 py-2 pr-12 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <span className="absolute right-3 inset-y-0 flex items-center text-[10px] text-slate-400">sec</span>
+          </div>
+        </label>
+        <button type="submit" className="px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">Save</button>
+      </div>
+      <div className="pt-0.5 flex items-center justify-between gap-3 text-[11px]">
+        <span className="text-slate-500 leading-relaxed">{message}</span>
+        <button
+          type="button"
+          onClick={() => setMonitoringState(!monitoring)}
+          className={`shrink-0 px-2.5 py-1 rounded-md border font-medium transition-colors ${monitoring ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
+        >
+          {monitoring ? 'Pause' : 'Resume'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function OverviewPage() {
-  const { mood, connected } = useFocus()
+  const { mood, connected, rightSidebarOpen } = useFocus()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('All')
+  const [modal, setModal] = useState(null)
+  const [notice, setNotice] = useState('')
+  const visibleActivities = activities.filter((activity) => (filter === 'All' || activity.status.toLowerCase().includes(filter.toLowerCase())) && `${activity.title} ${activity.description} ${activity.app}`.toLowerCase().includes(query.toLowerCase()))
+  function showNotice(message) { setNotice(message); window.setTimeout(() => setNotice(''), 2500) }
   return (
     <>
       <header className="h-16 px-8 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -92,10 +207,9 @@ function OverviewPage() {
             <input
               className="w-full pl-9 pr-3 py-1.5 bg-slate-50/80 border border-slate-200 text-xs rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               placeholder="Search activities, metrics, or objectives..."
-              type="text"
+              type="text" value={query} onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <div className="h-4 w-px bg-slate-200" />
           <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-xs font-medium text-slate-700 rounded-lg hover:bg-slate-50 transition">
             <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
               <rect height="18" rx="2" ry="2" width="18" x="3" y="4" />
@@ -108,19 +222,14 @@ function OverviewPage() {
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
-          <div className="flex items-center border border-slate-200 rounded-lg p-0.5 bg-white">
-            <button className="p-1 rounded text-slate-600 bg-slate-100 hover:text-slate-900" title="Split View">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                <rect height="18" rx="2" ry="2" width="18" x="3" y="3" />
-                <line x1="12" x2="12" y1="3" y2="21" />
-              </svg>
-            </button>
-            <button className="p-1 rounded text-slate-400 hover:text-slate-700" title="Single View">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                <rect height="18" rx="2" ry="2" width="18" x="3" y="3" />
-              </svg>
-            </button>
-          </div>
+          <button onClick={() => setModal('objective')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" />
+              <path d="M12 5v14" />
+            </svg>
+            New Objective
+          </button>
+          <SidebarToggle />
         </div>
       </header>
 
@@ -132,10 +241,7 @@ function OverviewPage() {
               <span className="text-xs text-slate-400 font-normal">09:00 AM — 10:30 AM</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-900 text-white cursor-pointer">All</span>
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer">Productive (89m)</span>
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 cursor-pointer">Distraction (7m)</span>
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 cursor-pointer">Stuck (15m)</span>
+              {['All', 'Productive', 'Distraction', 'Stuck'].map((option) => <button key={option} onClick={() => setFilter(option)} className={`px-2.5 py-0.5 rounded-md text-[11px] font-medium ${filter === option ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{option}{option === 'Productive' ? ' (89m)' : option === 'Distraction' ? ' (7m)' : option === 'Stuck' ? ' (15m)' : ''}</button>)}
             </div>
           </div>
           <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex gap-0.5 p-0.5">
@@ -159,10 +265,10 @@ function OverviewPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">Top Contexts & Sessions Today</h2>
-                <a href="#" className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View in Chronological Stream →</a>
+                <Link to="/activity" className="text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline">View in Chronological Stream →</Link>
               </div>
 
-              {activities.map((a) => (
+              {visibleActivities.map((a) => (
                 <div key={a.id} className={`bg-white rounded-xl border-2 ${a.borderColor} p-4 transition hover:shadow-sm`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -224,7 +330,8 @@ function OverviewPage() {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm">
+            {rightSidebarOpen && <ConnectionSettings />}
+            {rightSidebarOpen && <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-900">AI Session Synthesis</span>
                 <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Optimal</span>
@@ -250,9 +357,9 @@ function OverviewPage() {
                 </div>
                 <p className="text-[11px] text-slate-400 italic pt-1">Aligned with "Study electromagnetic induction for my physics exam"</p>
               </div>
-            </div>
+            </div>}
 
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3.5 shadow-sm">
+            {rightSidebarOpen && <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3.5 shadow-sm">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-900">Intent Defense & Interventions</h3>
               <div className="p-3 rounded-lg bg-rose-50/50 border border-rose-100 space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -269,23 +376,27 @@ function OverviewPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
                 </span>
               </div>
-            </div>
+            </div>}
 
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-2.5 shadow-sm">
+            {rightSidebarOpen && <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-2.5 shadow-sm">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-900 mb-3">Quick Actions</h3>
-              <button className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-2 shadow-sm shadow-blue-500/10 transition">
+              <button onClick={() => showNotice('Takeaways copied to your notes workspace.')} className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-2 shadow-sm shadow-blue-500/10 transition">
                 <span>Summarize Takeaways to Notes</span>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
                   <line x1="5" x2="19" y1="12" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
                 </svg>
               </button>
-              <button className="w-full py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">Reclassify Activities</button>
-              <button className="w-full py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">Adjust Focus Scope</button>
-            </div>
+              <button onClick={() => setModal('reclassify')} className="w-full py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">Reclassify Activities</button>
+              <button onClick={() => setModal('scope')} className="w-full py-2 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium rounded-lg transition">Adjust Focus Scope</button>
+            </div>}
           </div>
         </div>
       </main>
+      {notice && <div className="fixed bottom-5 right-5 z-40 rounded-xl bg-slate-900 px-4 py-3 text-xs font-medium text-white shadow-lg">{notice}</div>}
+      {modal === 'objective' && <ActionModal title="Create objective" description="Give your next focus session a clear target." onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); localStorage.setItem('focus-companion.newObjective', event.currentTarget.title.value); setModal(null); showNotice('Objective created.') }} className="space-y-3"><input name="title" required placeholder="Objective title" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><textarea name="description" placeholder="What does success look like?" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Create objective</button></form></ActionModal>}
+      {modal === 'reclassify' && <ActionModal title="Reclassify activities" description="Choose how IntentOS should treat the selected session." onClose={() => setModal(null)}><div className="grid grid-cols-3 gap-2">{['Productive', 'Distraction', 'Stuck'].map((option) => <button key={option} onClick={() => { setModal(null); showNotice(`Activities marked ${option.toLowerCase()}.`) }} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold hover:border-blue-400 hover:bg-blue-50">{option}</button>)}</div></ActionModal>}
+      {modal === 'scope' && <ActionModal title="Adjust focus scope" description="Update the session guardrail used by the analyzer." onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); setModal(null); showNotice('Focus scope updated.') }} className="space-y-3"><input defaultValue="Physics 301 Final" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Save scope</button></form></ActionModal>}
     </>
   )
 }

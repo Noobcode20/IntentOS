@@ -8,6 +8,8 @@ let settings = { apiUrl: '', captureInterval: 15 }; // captureInterval in second
 let currentTasks = [];
 let monitoringEnabled = true;
 let currentTargetMood = 60;
+let connectionState = { connected: false, message: 'Not connected — using demo mode' };
+let lastAnalysis = null;
 
 let captureTimer = null;
 let captureInFlight = false; // guards against overlapping requests if backend is slow
@@ -15,6 +17,11 @@ let captureInFlight = false; // guards against overlapping requests if backend i
 function broadcast(channel, payload) {
   if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.webContents.send(channel, payload);
   if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send(channel, payload);
+}
+
+function updateConnection(nextState) {
+  connectionState = nextState;
+  broadcast('conn-update', connectionState);
 }
 
 // ---- screenshot capture ----
@@ -42,7 +49,7 @@ async function captureAndAnalyze() {
     return;
   }
   if (!settings.apiUrl) {
-    broadcast('conn-update', { connected: false, message: 'Not connected — using demo mode' });
+    updateConnection({ connected: false, message: 'Not connected — using demo mode' });
     scheduleNextCapture();
     return;
   }
@@ -81,14 +88,15 @@ async function captureAndAnalyze() {
     currentTargetMood = mood;
 
     broadcast('mood-update', mood);
-    broadcast('analysis-update', {
+    lastAnalysis = {
       status: data.status || null,
       reasoning: data.reasoning || null,
       timestamp: Date.now(),
-    });
-    broadcast('conn-update', { connected: true, message: 'Connected — live data' });
+    };
+    broadcast('analysis-update', lastAnalysis);
+    updateConnection({ connected: true, message: 'Connected — live data' });
   } catch (e) {
-    broadcast('conn-update', { connected: false, message: "Can't reach backend — check the URL" });
+    updateConnection({ connected: false, message: "Can't reach backend — check the URL" });
   } finally {
     clearTimeout(timeoutId);
     captureInFlight = false;
@@ -104,8 +112,13 @@ function scheduleNextCapture() {
 
 // ---- IPC from the renderer windows ----
 ipcMain.on('settings-update', (event, newSettings) => {
-  settings = newSettings;
-  scheduleNextCapture();
+  settings = {
+    apiUrl: typeof newSettings?.apiUrl === 'string' ? newSettings.apiUrl : '',
+    captureInterval: Math.max(5, Number(newSettings?.captureInterval) || 15),
+  };
+  // A user who just saved a backend URL should not have to wait for the
+  // previous interval before learning whether it works.
+  captureAndAnalyze();
 });
 
 ipcMain.on('tasks-update', (event, tasks) => {
@@ -114,7 +127,15 @@ ipcMain.on('tasks-update', (event, tasks) => {
 
 ipcMain.on('monitoring-toggle', (event, enabled) => {
   monitoringEnabled = enabled;
+  if (monitoringEnabled) captureAndAnalyze();
 });
+
+ipcMain.handle('focus-state', () => ({
+  mood: currentTargetMood,
+  connected: connectionState.connected,
+  analysis: lastAnalysis,
+  monitoringEnabled,
+}));
 
 ipcMain.on('nudge', (event, delta) => {
   currentTargetMood = Math.max(0, Math.min(100, currentTargetMood + delta));
@@ -131,7 +152,14 @@ function createWindows() {
       contextIsolation: true,
     },
   });
-  dashboardWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+  // Vite serves React during development, enabling hot reload in Electron.
+  // Without the environment variable, the packaged build uses dist instead.
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    dashboardWindow.loadURL(devServerUrl);
+  } else {
+    dashboardWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+  }
 
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
   const winSize = 150;
@@ -153,7 +181,7 @@ function createWindows() {
   });
   petWindow.setAlwaysOnTop(true, 'screen-saver');
   petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  petWindow.loadFile('pet.html');
+  petWindow.loadFile(path.join(__dirname, 'pet.html'));
 
   dashboardWindow.on('closed', () => { dashboardWindow = null; });
   petWindow.on('closed', () => { petWindow = null; });
@@ -161,7 +189,7 @@ function createWindows() {
 
 app.whenReady().then(() => {
   createWindows();
-  scheduleNextCapture();
+  captureAndAnalyze();
 });
 
 app.on('window-all-closed', () => {

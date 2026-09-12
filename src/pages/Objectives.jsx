@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TopBar, SearchInput, DateSelector } from '../components/Layout'
+import { TopBar, SearchInput, DateSelector, SidebarToggle } from '../components/Layout'
+import { useFocus } from '../context/FocusContext'
+import ActionModal from '../components/ActionModal'
 
 const objectivesData = [
   {
@@ -66,7 +69,7 @@ const objectivesData = [
   },
 ]
 
-function ObjectiveCard({ obj }) {
+function ObjectiveCard({ obj, onMenu }) {
   return (
     <div className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all flex flex-col gap-4 ${obj.id === 1 ? 'border-2 border-blue-500/40' : 'border border-slate-200/90'}`}>
       <div className="flex items-start justify-between">
@@ -95,7 +98,7 @@ function ObjectiveCard({ obj }) {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs font-mono font-medium text-slate-500">{obj.due}</span>
-          <button className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={() => onMenu(obj)} aria-label={`Actions for ${obj.title}`} className="text-slate-400 hover:text-slate-600 p-1">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="1" />
               <circle cx="19" cy="12" r="1" />
@@ -174,51 +177,50 @@ function ObjectiveCard({ obj }) {
 }
 
 function ObjectivesPage() {
+  const { rightSidebarOpen } = useFocus()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('All')
+  const [modal, setModal] = useState(null)
+  useEffect(() => { const handler = (event) => setQuery(event.detail || ''); window.addEventListener('intent-search', handler); return () => window.removeEventListener('intent-search', handler) }, [])
+  const visibleObjectives = objectivesData.filter((obj) => (filter === 'All' || (filter === 'High Priority' ? obj.id === 1 : filter === 'Academic' ? obj.id < 3 : false)) && `${obj.title} ${obj.description}`.toLowerCase().includes(query.toLowerCase()))
   return (
     <>
       <TopBar title="Objectives">
         <SearchInput />
         <DateSelector />
-        <button className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20">
+        <button onClick={() => setModal('new')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20">
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14" />
             <path d="M12 5v14" />
           </svg>
           New Objective
         </button>
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/60 ml-1">
-          <button className="p-1 rounded-md bg-white shadow-sm text-slate-700">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="18" height="18" x="3" y="3" rx="2" />
-              <path d="M9 3v18" />
-            </svg>
-          </button>
-        </div>
+        <SidebarToggle />
       </TopBar>
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
         <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors">
+              <button onClick={() => setFilter(filter === 'High Priority' ? 'All' : 'High Priority')} className={`px-3.5 py-1.5 text-xs font-medium ${filter === 'High Priority' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-600 bg-white'} hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors`}>
                 High Priority (1)
               </button>
-              <button className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors">
+              <button onClick={() => setFilter(filter === 'Academic' ? 'All' : 'Academic')} className={`px-3.5 py-1.5 text-xs font-medium ${filter === 'Academic' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-slate-600 bg-white'} hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors`}>
                 Academic (2)
               </button>
-              <button className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors">
+              <button onClick={() => setModal('archived')} className="px-3.5 py-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-200/80 rounded-xl transition-colors">
                 Archived (5)
               </button>
             </div>
             <span className="text-xs font-medium text-slate-400">Sorting by: <strong className="text-slate-700 font-semibold">Priority & Live Activity</strong></span>
           </div>
 
-          {objectivesData.map((obj) => (
-            <ObjectiveCard key={obj.id} obj={obj} />
+          {visibleObjectives.map((obj) => (
+            <ObjectiveCard key={obj.id} obj={obj} onMenu={(objective) => setModal(objective)} />
           ))}
         </div>
 
-        <aside className="w-96 bg-white border-l border-slate-100 p-6 flex flex-col gap-5 overflow-y-auto shrink-0">
+        {rightSidebarOpen && <aside className="w-96 bg-white border-l border-slate-100 p-6 flex flex-col gap-5 overflow-y-auto shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Objective Insights</span>
             <span className="text-xs font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-full">In Focus</span>
@@ -292,16 +294,21 @@ function ObjectivesPage() {
           </div>
 
           <div className="flex flex-col gap-2.5 mt-auto pt-4">
-            <Link to="/objectives" className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-colors shadow-sm shadow-blue-500/20 flex items-center justify-center gap-2">
+            <button onClick={() => setModal('milestone')} className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-colors shadow-sm shadow-blue-500/20 flex items-center justify-center gap-2">
               <span>Add Milestone to Objective</span>
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-            </Link>
-            <button className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors">
+            </button>
+            <button onClick={() => setModal('guardrails')} className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors">
               Configure Intent Guardrails
             </button>
           </div>
-        </aside>
+        </aside>}
       </div>
+      {modal === 'new' && <ActionModal title="Create objective" description="Define a new target for IntentOS to track." onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); setModal(null) }} className="space-y-3"><input required placeholder="Objective title" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><textarea placeholder="Description" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Create objective</button></form></ActionModal>}
+      {modal === 'milestone' && <ActionModal title="Add milestone" description="Add the next concrete step to Physics 301 Final Exam." onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); setModal(null) }} className="space-y-3"><input required placeholder="Milestone name" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Add milestone</button></form></ActionModal>}
+      {modal === 'guardrails' && <ActionModal title="Intent guardrails" description="Choose whether automatic nudges can interrupt off-task activity." onClose={() => setModal(null)}><label className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm text-slate-700"><span>Automatic nudges</span><input type="checkbox" defaultChecked className="h-4 w-4 accent-blue-600" /></label><button onClick={() => setModal(null)} className="mt-3 w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Save rules</button></ActionModal>}
+      {modal && typeof modal === 'object' && <ActionModal title="Objective actions" description={modal.title} onClose={() => setModal(null)}><div className="grid grid-cols-2 gap-2"><button onClick={() => setModal(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50">Edit objective</button><button onClick={() => setModal(null)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">Archive objective</button></div></ActionModal>}
+      {modal === 'archived' && <ActionModal title="Archived objectives" description="Archived objectives are hidden from the active workspace." onClose={() => setModal(null)}><p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">No archived objectives in this demo workspace.</p></ActionModal>}
     </>
   )
 }

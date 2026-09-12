@@ -1,4 +1,7 @@
-import { TopBar, SearchInput, DateSelector } from '../components/Layout'
+import { useState } from 'react'
+import { SidebarToggle } from '../components/Layout'
+import { useFocus } from '../context/FocusContext'
+import ActionModal from '../components/ActionModal'
 
 const timelineSegments = [
   { label: 'YouTube Physics Lecture', start: '09:02', end: '09:26', duration: '24m', color: 'bg-[#3b82f6]', percent: 28, type: 'productive' },
@@ -116,6 +119,15 @@ const detailMilestones = [
 ]
 
 function ActivityPage() {
+  const { rightSidebarOpen } = useFocus()
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('All')
+  const [selectedId, setSelectedId] = useState(1)
+  const [modal, setModal] = useState(null)
+  const [notice, setNotice] = useState('')
+  const filtered = timelineActivities.filter((activity) => (filter === 'All' || activity.type.toLowerCase().includes(filter.toLowerCase())) && `${activity.title} ${activity.description} ${activity.app}`.toLowerCase().includes(query.toLowerCase()))
+  const selected = timelineActivities.find((activity) => activity.id === selectedId) || timelineActivities[0]
+  const showNotice = (message) => { setNotice(message); window.setTimeout(() => setNotice(''), 2200) }
   return (
     <>
       <header className="h-14 border-b border-[#eaecf0] bg-white px-6 flex items-center justify-between sticky top-0 z-20">
@@ -126,14 +138,13 @@ function ActivityPage() {
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
             </svg>
-            <input
+            <input value={query} onChange={(event) => setQuery(event.target.value)}
               className="bg-[#f8fafc] border border-[#e2e8f0] text-[12px] rounded-lg pl-8 pr-3 py-1.5 w-[250px] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 placeholder:text-[#94a3b8] transition-all"
               placeholder="Search activities or topics..."
               type="text"
             />
           </div>
-          <div className="h-4 w-[1px] bg-[#e2e8f0]" />
-          <button className="flex items-center gap-2 border border-[#e2e8f0] bg-white rounded-lg px-2.5 py-1.5 text-[12px] text-[#334155] hover:bg-[#f8fafc] transition-colors font-medium">
+          <button onClick={() => showNotice('Date range picker is set to today.')} className="flex items-center gap-2 border border-[#e2e8f0] bg-white rounded-lg px-2.5 py-1.5 text-[12px] text-[#334155] hover:bg-[#f8fafc] transition-colors font-medium">
             <svg className="w-3.5 h-3.5 text-[#64748b]" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
               <rect height="18" rx="2" ry="2" width="18" x="3" y="4" />
               <line x1="16" x2="16" y1="2" y2="6" />
@@ -145,14 +156,14 @@ function ActivityPage() {
               <path d="m6 9 6 6 6-6" />
             </svg>
           </button>
-          <div className="border border-[#e2e8f0] rounded-lg p-1 flex items-center bg-white">
-            <button className="p-1 hover:bg-[#f1f5f9] rounded text-[#475569]">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                <rect height="18" rx="2" width="18" x="3" y="3" />
-                <path d="M12 3v18" />
-              </svg>
-            </button>
-          </div>
+          <button onClick={() => setModal('objective')} className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-sm shadow-blue-500/20">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" />
+              <path d="M12 5v14" />
+            </svg>
+            New Objective
+          </button>
+          <SidebarToggle />
         </div>
       </header>
 
@@ -167,10 +178,7 @@ function ActivityPage() {
           <span className="text-[11px] font-mono text-[#64748b]">10:30 AM</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <button className="px-3 py-1 rounded-full text-[11.5px] font-medium bg-[#0f172a] text-white">All</button>
-          <button className="px-3 py-1 rounded-full text-[11.5px] font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Productive</button>
-          <button className="px-3 py-1 rounded-full text-[11.5px] font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Distraction</button>
-          <button className="px-3 py-1 rounded-full text-[11.5px] font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Stuck</button>
+          {['All', 'Productive', 'Distraction', 'Stuck'].map((option) => <button key={option} onClick={() => setFilter(option)} className={`px-3 py-1 rounded-full text-[11.5px] font-medium ${filter === option ? 'bg-[#0f172a] text-white' : 'text-[#64748b] hover:bg-[#f1f5f9]'}`}>{option}</button>)}
         </div>
       </div>
 
@@ -182,10 +190,10 @@ function ActivityPage() {
           </div>
           <div className="relative pl-6 space-y-4">
             <div className="absolute left-[7px] top-3 bottom-4 w-[1px] bg-[#e2e8f0]" />
-            {timelineActivities.map((a) => (
+            {filtered.map((a) => (
               <div key={a.id} className="relative">
                 <div className="absolute -left-[27px] top-4 w-3.5 h-3.5 rounded-full bg-[#94a3b8] border-2 border-white" />
-                <div className={`border-[1.5px] ${a.borderColor} rounded-xl bg-white p-4 shadow-sm hover:shadow transition-shadow`}>
+                <button type="button" onClick={() => setSelectedId(a.id)} className={`w-full text-left border-[1.5px] ${a.borderColor} rounded-xl bg-white p-4 shadow-sm hover:shadow transition-shadow ${selectedId === a.id ? 'ring-2 ring-blue-100' : ''}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 text-[11.5px] text-[#64748b]">
                       <span className="font-mono text-[#475569]">{a.time}</span>
@@ -201,28 +209,28 @@ function ActivityPage() {
                   </div>
                   <h3 className="text-[14px] font-bold text-[#0f172a] mb-1">{a.title}</h3>
                   <p className="text-[12.5px] text-[#64748b] leading-relaxed">{a.description}</p>
-                </div>
+                </button>
               </div>
             ))}
           </div>
         </section>
 
-        <aside className="w-[430px] flex-shrink-0 bg-white p-6 overflow-y-auto flex flex-col justify-between">
+        {rightSidebarOpen && <aside className="w-[430px] flex-shrink-0 bg-white p-6 overflow-y-auto flex flex-col justify-between">
           <div className="space-y-5">
             <div className="flex items-center justify-between pb-1">
               <h2 className="text-[14px] font-bold text-[#0f172a]">Activity Details</h2>
-              <span className="bg-[#ecfdf5] text-[#059669] text-[11.5px] font-medium px-2.5 py-0.5 rounded-md">Productive</span>
+              <span className={`${selected.typeColor} text-[11.5px] font-medium px-2.5 py-0.5 rounded-md`}>{selected.type}</span>
             </div>
 
             <div>
-              <span className="text-[11.5px] font-mono text-[#94a3b8] block mb-1">09:02 AM - 09:26 AM (24m)</span>
-              <h3 className="text-[16px] font-bold text-[#0f172a] leading-tight mb-2">Electromagnetic Induction — Physics Lecture</h3>
+              <span className="text-[11.5px] font-mono text-[#94a3b8] block mb-1">{selected.time} · {selected.duration}</span>
+              <h3 className="text-[16px] font-bold text-[#0f172a] leading-tight mb-2">{selected.title}</h3>
               <div className="flex items-center gap-1.5 text-[12px] text-[#64748b]">
                 <svg className="w-4 h-4 text-[#ef4444]" fill="currentColor" viewBox="0 0 24 24">
                   <circle cx="12" cy="12" fill="#fee2e2" r="10" />
                   <polygon fill="#ef4444" points="10 8 16 12 10 16 10 8" />
                 </svg>
-                <span>{timelineSegments[0].appSubtitle || 'YouTube via Arc Browser'}</span>
+                <span>{selected.appSubtitle || selected.app}</span>
               </div>
             </div>
 
@@ -246,9 +254,7 @@ function ActivityPage() {
                 </svg>
                 <h4 className="text-[12px] font-semibold text-[#1e293b]">Context & Reasoning</h4>
               </div>
-              <p className="text-[12px] text-[#64748b] leading-relaxed">
-                Detected active derivation of Faraday's Law and magnetic flux equations matching syllabus topics. High keystroke correlation in Obsidian notes without distracting tab switching.
-              </p>
+              <p className="text-[12px] text-[#64748b] leading-relaxed">{selected.contextReasoning || selected.description}</p>
             </div>
 
             <div className="border border-[#e2e8f0] rounded-xl p-4 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
@@ -287,19 +293,22 @@ function ActivityPage() {
           </div>
 
           <div className="pt-5 space-y-2">
-            <button className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white py-2.5 px-4 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors">
+            <button onClick={() => showNotice('Takeaway copied to your notes workspace.')} className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white py-2.5 px-4 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors">
               <span>Summarize Takeaway to Notes</span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M5 12h14" />
                 <path d="m12 5 7 7-7 7" />
               </svg>
             </button>
-            <button className="w-full bg-white hover:bg-[#f8fafc] text-[#334155] border border-[#e2e8f0] py-2.5 px-4 rounded-xl text-[13px] font-medium transition-colors">
+            <button onClick={() => setModal('reclassify')} className="w-full bg-white hover:bg-[#f8fafc] text-[#334155] border border-[#e2e8f0] py-2.5 px-4 rounded-xl text-[13px] font-medium transition-colors">
               Reclassify Activity
             </button>
           </div>
-        </aside>
+        </aside>}
       </div>
+      {notice && <div className="fixed bottom-5 right-5 z-40 rounded-xl bg-slate-900 px-4 py-3 text-xs font-medium text-white shadow-lg">{notice}</div>}
+      {modal === 'objective' && <ActionModal title="Create objective" description="Add a clear target for the next focus session." onClose={() => setModal(null)}><form onSubmit={(event) => { event.preventDefault(); setModal(null); showNotice('Objective created.') }} className="space-y-3"><input required placeholder="Objective title" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /><button className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white">Create objective</button></form></ActionModal>}
+      {modal === 'reclassify' && <ActionModal title="Reclassify activity" description="Apply a new classification to the selected activity." onClose={() => setModal(null)}><div className="grid grid-cols-3 gap-2">{['Productive', 'Distraction', 'Stuck'].map((option) => <button key={option} onClick={() => { setModal(null); showNotice(`Marked ${option.toLowerCase()}.`) }} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold hover:border-blue-400 hover:bg-blue-50">{option}</button>)}</div></ActionModal>}
     </>
   )
 }
